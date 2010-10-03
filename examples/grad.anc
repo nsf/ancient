@@ -1,0 +1,30 @@
+foreign sdl_init;
+foreign sdl_flip;
+foreign sdl_loop;
+foreign sdl_pixel(x, y, r, g, b);
+
+func fill
+{
+	var step = 1.0 / 512;
+	var col = 0;
+
+	/* draw gradient image */
+	var y = 0;
+	for y < 512 {
+		var x = 0;
+		for x < 512 {
+			sdl_pixel(x, y, col, col, col);
+			x = x + 1;
+		}
+		col = col + step;
+		y = y + 1;
+	}
+}
+
+func main
+{
+	sdl_init;
+	fill;
+	sdl_flip;
+	sdl_loop;
+}

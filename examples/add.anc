@@ -1,0 +1,9 @@
+func add(a, b) 
+{ 
+	return a + b;
+}
+
+func main 
+{ 
+	return add(1, 2);
+}

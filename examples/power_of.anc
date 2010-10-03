@@ -1,0 +1,14 @@
+func power_of(num, power)
+{
+	var i = 1;
+	for i < power {
+		i = i+1;
+		num = num*2;
+	}
+	return num;
+}
+
+func main
+{
+	return power_of(2, 16);
+}
