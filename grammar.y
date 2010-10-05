@@ -5,16 +5,20 @@
 %left DIVIDE TIMES.
 
 %include {
-#include <stdio.h>
-#include <assert.h>
-#include "grammar.h"
-#include "parser.h"
+	#include <stdio.h>
+	#include <assert.h>
+	#include "grammar.h"
+	#include "parser.h"
 
-struct stmts *SSS;
+	struct stmts *SSS;
 }
 
+%extra_argument { struct parser_context *ctx }
+
 %syntax_error {
-	printf("Syntax error!\n");
+	print_syntax_error(ctx, "Syntax error, unexpected token '%s' on line: %d",
+			   tokname(ctx->lasttoken), ctx->line);
+	exit(1);
 }
 
 program ::= stmts(A). { SSS = A; }

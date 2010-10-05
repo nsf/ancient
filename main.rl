@@ -17,12 +17,12 @@ extern struct stmts *SSS;
 // lemon parser definitions
 void *ParseAlloc(void*(*)(size_t));
 void ParseFree(void*, void(*)(void*));
-void Parse(void*, int, struct token);
+void Parse(void*, int, struct token, struct parser_context*);
 
 %%{
 	machine ancient;
 
-	newline = '\n' @{curline++;};
+	newline = '\n' @{lemon.line++;};
 	any_count_line = any | newline;
 
 	c_comment := any_count_line* :>> '*/' @{fgoto main;};
@@ -39,38 +39,38 @@ void Parse(void*, int, struct token);
 	'/*' {fgoto c_comment;};
 
 	# integers
-	digit+ { emit_double(lemon, ts, te); };
+	digit+ { emit_double(&lemon, ts, te); };
 
 	# floats
-	digit+ '.' digit+ { emit_double(lemon, ts, te); };
+	digit+ '.' digit+ { emit_double(&lemon, ts, te); };
 
 	# punctuation stuff
-	'+' { emit_symbol(lemon, PLUS); };
-	'-' { emit_symbol(lemon, MINUS); };
-	'*' { emit_symbol(lemon, TIMES); };
-	'/' { emit_symbol(lemon, DIVIDE); };
-	'<' { emit_symbol(lemon, LESS); };
-	'(' { emit_symbol(lemon, LPAREN); };
-	')' { emit_symbol(lemon, RPAREN); };
-	';' { emit_symbol(lemon, SEMICOLON); };
-	'=' { emit_symbol(lemon, EQUALS); };
-	',' { emit_symbol(lemon, COMMA); };
-	'{' { emit_symbol(lemon, LBRACE); };
-	'}' { emit_symbol(lemon, RBRACE); };
+	'+' { emit_symbol(&lemon, PLUS, ts); };
+	'-' { emit_symbol(&lemon, MINUS, ts); };
+	'*' { emit_symbol(&lemon, TIMES, ts); };
+	'/' { emit_symbol(&lemon, DIVIDE, ts); };
+	'<' { emit_symbol(&lemon, LESS, ts); };
+	'(' { emit_symbol(&lemon, LPAREN, ts); };
+	')' { emit_symbol(&lemon, RPAREN, ts); };
+	';' { emit_symbol(&lemon, SEMICOLON, ts); };
+	'=' { emit_symbol(&lemon, EQUALS, ts); };
+	',' { emit_symbol(&lemon, COMMA, ts); };
+	'{' { emit_symbol(&lemon, LBRACE, ts); };
+	'}' { emit_symbol(&lemon, RBRACE, ts); };
 
 	# keywords
-	'if' { emit_symbol(lemon, IF); };
-	'else' { emit_symbol(lemon, ELSE); };
-	'for' { emit_symbol(lemon, FOR); };
-	'func' { emit_symbol(lemon, FUNC); };
-	'foreign' { emit_symbol(lemon, FOREIGN); };
-	'var' { emit_symbol(lemon, VAR); };
-	'return' { emit_symbol(lemon, RET); };
+	'if'      { emit_symbol(&lemon, IF, ts); };
+	'else'    { emit_symbol(&lemon, ELSE, ts); };
+	'for'     { emit_symbol(&lemon, FOR, ts); };
+	'func'    { emit_symbol(&lemon, FUNC, ts); };
+	'foreign' { emit_symbol(&lemon, FOREIGN, ts); };
+	'var'     { emit_symbol(&lemon, VAR, ts); };
+	'return'  { emit_symbol(&lemon, RET, ts); };
 
 	alnum_u = alnum | '_';
 	alpha_u = alpha | '_';
 
-	alpha_u alnum_u* { emit_ident(lemon, ts, te-ts); };
+	alpha_u alnum_u* { emit_ident(&lemon, ts, te-ts); };
 
 	*|;
 }%%
@@ -78,21 +78,25 @@ void Parse(void*, int, struct token);
 %% write data;
 
 #define DEF_T(tt) struct token t; t.type = tt
-static void emit_symbol(void *lemon, int tok)
+static void emit_symbol(struct parser_context *ctx, int tok, char *ts)
 {
 	DEF_T(tok);
-	Parse(lemon, tok, t);
+	ctx->lasttoken = tok;
+	ctx->ts = ts;
+	Parse(ctx->lemon, tok, t, ctx);
 }
 
-static void emit_ident(void *lemon, char *beg, int len)
+static void emit_ident(struct parser_context *ctx, char *beg, int len)
 {
 	DEF_T(IDENT);
 	t.ident.beg = beg;
 	t.ident.len = len;
-	Parse(lemon, IDENT, t);
+	ctx->lasttoken = IDENT;
+	ctx->ts = beg;
+	Parse(ctx->lemon, IDENT, t, ctx);
 }
 
-static void emit_double(void *lemon, char *ts, char *te)
+static void emit_double(struct parser_context *ctx, char *ts, char *te)
 {
 	char tmpbuf[512];
 	int len = te - ts;
@@ -103,7 +107,9 @@ static void emit_double(void *lemon, char *ts, char *te)
 	double num = strtod(tmpbuf, 0);
 	DEF_T(DOUBLE);
 	t.num = num;
-	Parse(lemon, DOUBLE, t);
+	ctx->lasttoken = DOUBLE;
+	ctx->ts = ts;
+	Parse(ctx->lemon, DOUBLE, t, ctx);
 }
 
 static void llvm_wipe_module(LLVMModuleRef m)
@@ -122,7 +128,7 @@ static void llvm_wipe_module(LLVMModuleRef m)
 
 int main(int argc, char **argv)
 {
-	int cs, act, curline = 1;
+	int cs, act;
 	char *ts, *te, *eof;
 
 	LLVMModuleRef llmod = LLVMModuleCreateWithName("main");
@@ -152,25 +158,31 @@ int main(int argc, char **argv)
 	%% write init;
 
 	// init parser
-	void *lemon = ParseAlloc(malloc);
+	struct parser_context lemon = {
+		ParseAlloc(malloc),
+		1,
+		-1,
+		0,
+		0
+	};
 
 #if 1
 	// trash loading
 	char *buf = malloc(65536);
 	int n = fread(buf, 1, 65536, stdin);
 	if (n == 65536) {
-		printf("source code limit failure\n");
+		fprintf(stderr, "source code limit failure\n");
 		return 1;
 	}
-	printf("read: %d\n", n);
 	buf[n] = '\0';
 	
 	char *p	= buf;
 	char *pe = buf + n + 1;
+	lemon.buf = buf;
 
 	%% write exec;
 
-	Parse(lemon, 0, (struct token){0,0});
+	Parse(lemon.lemon, 0, (struct token){0,0}, &lemon);
 	print_ast(SSS);
 	struct codegen_context ctx = {0, llmod};
 	codegen(&ctx, SSS);
@@ -197,7 +209,7 @@ int main(int argc, char **argv)
 
 		%% write exec;
 	
-		Parse(lemon, 0, (struct token){0, 0});
+		Parse(lemon.lemon, 0, (struct token){0, 0}, &lemon);
 		struct codegen_context ctx = {0, llmod};
 		codegen(&ctx, SSS);
 
@@ -224,7 +236,7 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	ParseFree(lemon, free);
+	ParseFree(lemon.lemon, free);
 
 	return 0;
 }

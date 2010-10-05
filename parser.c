@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <assert.h>
+#include <ctype.h>
 #include "parser.h"
 #include "grammar.h"
 
@@ -12,10 +13,70 @@ static char tokchars[] = {
 	[TIMES] = '*',
 };
 
+static const char *toknames[] = {
+	[LESS] = "<",
+	[PLUS] = "+",
+	[MINUS] = "-",
+	[DIVIDE] = "/",
+	[TIMES] = "*",
+	[IDENT] = "ident",
+	[SEMICOLON] = ";",
+	[EQUALS] = "=",
+	[VAR] = "var",
+	[RET] = "return",
+	[LBRACE] = "{",
+	[RBRACE] = "}",
+	[IF] = "if",
+	[ELSE] = "else",
+	[FOR] = "for",
+	[FUNC] = "func",
+	[LPAREN] = "(",
+	[RPAREN] = ")",
+	[FOREIGN] = "foreign",
+	[DOUBLE] = "double",
+	[COMMA] = ",",
+};
+
+const char *tokname(int token)
+{
+	return toknames[token];
+}
+
+void print_syntax_error(struct parser_context *ctx, const char *msg, ...)
+{
+	char *beg = ctx->buf;
+	if (ctx->line != 1) {
+		char *iter = ctx->ts;
+		while (*iter != '\n')
+			iter--;
+		beg = iter+1;
+	}
+	char *end = strchr(beg, '\n');
+	// print string with an error
+	if (end)
+		fwrite(beg, 1, end-beg+1, stderr);
+	else
+		fprintf(stderr, "%s\n", beg);
+	// print error pointer
+	int i;
+	for (i = 0; i < ctx->ts - beg; i++) {
+		if (isspace(beg[i]))
+			fputc(beg[i], stderr);
+		else
+			fputc(' ', stderr);
+	}
+	fputs("\033[1;31m^\033[0m\n", stderr);
+	// print error message
+	va_list args;
+	va_start(args, msg);
+	vfprintf(stderr, msg, args);
+	fputs("\n", stderr);
+	va_end(args);
+}
+
 #define DEF_E(tt) struct expr *e = malloc(sizeof(struct expr)); e->type = tt
 struct expr *new_num_expr(double num)
 {
-	//printf("num\n");
 	DEF_E(EXPR_NUM);
 	e->num = num;
 	return e;
@@ -23,7 +84,6 @@ struct expr *new_num_expr(double num)
 
 struct expr *new_binary_expr(int tok, struct expr *lhs, struct expr *rhs)
 {
-	//printf("binary\n");
 	DEF_E(EXPR_BIN);
 	e->bin.tok = tok;
 	e->bin.lhs = lhs;
