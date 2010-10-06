@@ -131,28 +131,14 @@ int main(int argc, char **argv)
 	int cs, act;
 	char *ts, *te, *eof;
 
-	LLVMModuleRef llmod = LLVMModuleCreateWithName("main");
-
-	//LLVMLinkInJIT();
 	LLVMInitializeNativeTarget();
 
-/*
-	LLVMExecutionEngineRef engine;
-	char *error = 0;
-	LLVMCreateJITCompilerForModule(&engine, llmod, 2, &error);
-	if (error) {
-		printf("%s\n", error);
-		return 1;
-	}
-
 	LLVMPassManagerRef pass = LLVMCreatePassManager();
-	LLVMAddTargetData(LLVMGetExecutionEngineTargetData(engine), pass);
 	LLVMAddConstantPropagationPass(pass);
 	LLVMAddInstructionCombiningPass(pass);
 	LLVMAddPromoteMemoryToRegisterPass(pass);
 	LLVMAddGVNPass(pass);
 	LLVMAddCFGSimplificationPass(pass);
-*/
 
 	// init lexer
 	%% write init;
@@ -184,11 +170,9 @@ int main(int argc, char **argv)
 
 	Parse(lemon.lemon, 0, (struct token){0,0}, &lemon);
 	print_ast(SSS);
-	struct codegen_context ctx = {0, llmod};
-	codegen(&ctx, SSS);
-		
+	LLVMModuleRef llmod = codegen(SSS);
+	LLVMRunPassManager(pass, llmod);
 	LLVMDumpModule(llmod);
-
 	LLVMWriteBitcodeToFile(llmod, "out.bc");
 #else
 	// prompt

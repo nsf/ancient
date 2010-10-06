@@ -3,6 +3,9 @@
 #include <llvm-c/Core.h>
 #include "array.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 const char *tokname(int token);
 
 struct token {
@@ -132,25 +135,7 @@ struct parser_context {
 };
 void print_syntax_error(struct parser_context *ctx, const char *msg, ...);
 
-struct value {
-	struct expr *ident;
-	LLVMValueRef value;
-};
-
-struct scope {
-	DECLARE_ARRAY(struct value, values);
-};
-
-struct scope *new_scope();
-LLVMValueRef in_scope(struct scope *s, const char *name);
-LLVMValueRef in_scope_ident(struct scope *s, struct expr *ident);
-void add_to_scope(struct scope *s, struct expr *ident, LLVMValueRef value);
-
-struct codegen_context {
-	LLVMBuilderRef builder;
-	LLVMModuleRef module;
-	struct scope *scope;
-	LLVMValueRef F;
-};
-
-int codegen(struct codegen_context *ctx, struct stmts *ss);
+LLVMModuleRef codegen(struct stmts *ss);
+#ifdef __cplusplus
+} // extern "C"
+#endif
